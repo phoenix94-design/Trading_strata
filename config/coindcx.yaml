@@ -1,0 +1,16 @@
+# CoinDCX spot, INR markets. Pairs use CoinDCX's "I-<COIN>_INR" format.
+symbols: [I-BTC_INR, I-ETH_INR]
+quote_currency: INR
+interval: 1h            # candle size the strategy reads
+poll_seconds: 60        # how often the loop runs (stops are checked every loop)
+paper_cash: 100000      # starting balance for paper mode, in INR
+
+strategy:
+  name: ema_trend
+  params: {fast: 20, slow: 50, trend: 200, atr_period: 14, atr_mult: 2.5}
+
+risk:
+  risk_per_trade_pct: 1.0     # a stopped-out trade costs ~1% of the account
+  max_position_pct: 30.0
+  max_daily_loss_pct: 3.0
+  max_open_positions: 2

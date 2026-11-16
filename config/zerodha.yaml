@@ -1,0 +1,17 @@
+# Zerodha, NSE delivery (CNC), long only. Symbols are NSE trading symbols.
+# Liquid index ETFs make a sensible first universe: low price, no single-stock surprises.
+symbols: [NIFTYBEES, BANKBEES]
+exchange: NSE
+interval: 1h
+poll_seconds: 60
+paper_cash: 100000
+
+strategy:
+  name: ema_trend
+  params: {fast: 20, slow: 50, trend: 200, atr_period: 14, atr_mult: 2.5}
+
+risk:
+  risk_per_trade_pct: 1.0
+  max_position_pct: 40.0
+  max_daily_loss_pct: 3.0
+  max_open_positions: 2

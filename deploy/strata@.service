@@ -1,0 +1,24 @@
+# One copy per platform:  sudo systemctl enable --now strata@coindcx strata@zerodha
+# install.sh fills in __USER__ and __DIR__.
+[Unit]
+Description=Strata trading app (%i)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/.env
+ExecStart=__DIR__/venv/bin/python main.py --platform %i
+Restart=always
+RestartSec=10
+# Small hardening: the app can only write its own state/ and logs/ folders.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__DIR__/state __DIR__/logs
+
+[Install]
+WantedBy=multi-user.target
