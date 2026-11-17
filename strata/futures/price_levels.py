@@ -108,6 +108,7 @@ class PriceLevelBot:
         raw = load_json(self.state_path, {})
         self.state = {s.name: SetupState(**raw.get(s.name, {})) for s in self.setups}
         self.reconciled = False
+        self.skip_logged = set()
 
     # ---------- bookkeeping ----------
     def save(self):
@@ -181,8 +182,11 @@ class PriceLevelBot:
             if not s.entry_hit(price):
                 return
             if s.sl_hit(price) or s.tp_hit(price):
-                log.info("%s: price %s already past stop/target; not entering", s.name, s.fmt(price))
+                if s.name not in self.skip_logged:      # say it once, not every 5 seconds
+                    log.info("%s: price %s already past stop/target; not entering", s.name, s.fmt(price))
+                    self.skip_logged.add(s.name)
                 return
+            self.skip_logged.discard(s.name)
             if self.mode == "live":
                 self.open_live(s, st)
             else:

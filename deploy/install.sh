@@ -9,7 +9,13 @@ USER_NAME="$(id -un)"
 PLATFORMS=("${@:-coindcx}")
 
 echo "==> 1. Python environment"
-python3 -m venv --help >/dev/null 2>&1 || sudo apt install -y python3-venv
+# `venv --help` works even without ensurepip, so test ensurepip itself (Ubuntu 26.04: python3.14-venv)
+if ! python3 -c "import ensurepip" >/dev/null 2>&1; then
+  PYV="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+  sudo apt-get install -y "python${PYV}-venv" || sudo apt-get install -y python3-venv
+  rm -rf venv                                  # a half-built venv from a failed run
+fi
+[ -x venv/bin/pip ] || rm -rf venv
 [ -d venv ] || python3 -m venv venv
 venv/bin/pip install -q --upgrade pip
 venv/bin/pip install -q -r requirements.txt
