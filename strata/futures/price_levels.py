@@ -34,7 +34,7 @@ class Setup:
     name: str
     pair: str                   # CoinDCX futures pair, e.g. B-BTC_USDT
     side: str                   # long | short
-    entry_price: float
+    entry_price: float | str    # a price, or "market" = enter now at the current price
     take_profit: float
     stop_loss: float
     quantity: float             # contract size in the coin, e.g. 0.001 BTC
@@ -52,26 +52,47 @@ class Setup:
             self.entry_when = "at_or_below" if self.side == "long" else "at_or_above"
         if self.entry_when not in ("at_or_below", "at_or_above"):
             raise ValueError(f"{self.name}: entry_when must be at_or_below or at_or_above")
-        if self.side == "long" and not self.stop_loss < self.entry_price < self.take_profit:
-            raise ValueError(f"{self.name}: long needs stop_loss < entry_price < take_profit")
-        if self.side == "short" and not self.take_profit < self.entry_price < self.stop_loss:
-            raise ValueError(f"{self.name}: short needs take_profit < entry_price < stop_loss")
+        if self.at_market:
+            # the entry is whatever the price is; only check what we can now, the rest at entry time
+            if self.side == "long" and not self.stop_loss < self.take_profit:
+                raise ValueError(f"{self.name}: long needs stop_loss < take_profit")
+            if self.side == "short" and not self.take_profit < self.stop_loss:
+                raise ValueError(f"{self.name}: short needs take_profit < stop_loss")
+        else:
+            self.entry_price = float(self.entry_price)
+            if self.side == "long" and not self.stop_loss < self.entry_price < self.take_profit:
+                raise ValueError(f"{self.name}: long needs stop_loss < entry_price < take_profit")
+            if self.side == "short" and not self.take_profit < self.entry_price < self.stop_loss:
+                raise ValueError(f"{self.name}: short needs take_profit < entry_price < stop_loss")
         if not 1 <= self.leverage <= MAX_LEVERAGE:
             raise ValueError(f"{self.name}: leverage must be 1..{MAX_LEVERAGE}")
         if self.quantity <= 0:
             raise ValueError(f"{self.name}: quantity must be > 0")
-        # With isolated margin you are liquidated after roughly a 1/leverage move.
-        # The stop must sit well inside that, or liquidation hits before the stop does.
-        stop_move = abs(self.entry_price - self.stop_loss) / self.entry_price
+        if not self.at_market:
+            problem = self.stop_problem(self.entry_price)
+            if problem:
+                raise ValueError(f"{self.name}: {problem}")
+
+    @property
+    def at_market(self):
+        return isinstance(self.entry_price, str) and self.entry_price.strip().lower() == "market"
+
+    def stop_problem(self, entry):
+        """With isolated margin you are liquidated after roughly a 1/leverage move.
+        The stop must sit well inside that, or liquidation hits before the stop does."""
+        stop_move = abs(entry - self.stop_loss) / entry
         if stop_move >= 0.8 / self.leverage:
-            raise ValueError(f"{self.name}: stop is {stop_move:.1%} away but {self.leverage}x leverage "
-                             f"liquidates near {1 / self.leverage:.1%}; lower leverage or tighten the stop")
+            return (f"stop is {stop_move:.1%} away but {self.leverage}x leverage liquidates near "
+                    f"{1 / self.leverage:.1%}; lower leverage or tighten the stop")
+        return None
 
     @property
     def order_side(self):          # side of the opening order
         return "buy" if self.side == "long" else "sell"
 
     def entry_hit(self, price):
+        if self.at_market:
+            return True
         return price <= self.entry_price if self.entry_when == "at_or_below" else price >= self.entry_price
 
     def tp_hit(self, price):
@@ -138,7 +159,7 @@ class PriceLevelBot:
             if pos and st.phase != "open":
                 log.warning("%s: found an open %s position on CoinDCX; adopting it and (re)placing TP/SL", s.name, s.pair)
                 st.phase, st.position_id = "open", str(pos["id"])
-                st.entry_fill = float(pos.get("avg_price") or s.entry_price)
+                st.entry_fill = float(pos.get("avg_price") or self.client.last_price(s.pair))
                 self.client.set_tpsl(st.position_id, s.take_profit, s.stop_loss, s.fmt)
             elif not pos and st.phase == "open":
                 self.close_book(s, self.client.last_price(s.pair), "closed while Strata was offline")
@@ -181,9 +202,14 @@ class PriceLevelBot:
         if st.phase == "waiting":
             if not s.entry_hit(price):
                 return
+            problem = None
             if s.sl_hit(price) or s.tp_hit(price):
+                problem = "already past stop/target"
+            elif s.at_market:
+                problem = s.stop_problem(price)
+            if problem:
                 if s.name not in self.skip_logged:      # say it once, not every 5 seconds
-                    log.info("%s: price %s already past stop/target; not entering", s.name, s.fmt(price))
+                    log.info("%s: price %s %s; not entering", s.name, s.fmt(price), problem)
                     self.skip_logged.add(s.name)
                 return
             self.skip_logged.discard(s.name)
@@ -192,8 +218,8 @@ class PriceLevelBot:
             else:
                 st.entry_fill = price
             st.phase, st.opened_at = "open", datetime.now().isoformat(timespec="seconds")
-            self.record(s, "open", st.entry_fill, f"price reached {s.fmt(s.entry_price)}; "
-                                                  f"TP {s.fmt(s.take_profit)} SL {s.fmt(s.stop_loss)}")
+            how = "market entry" if s.at_market else f"price reached {s.fmt(s.entry_price)}"
+            self.record(s, "open", st.entry_fill, f"{how}; TP {s.fmt(s.take_profit)} SL {s.fmt(s.stop_loss)}")
             return
 
         # phase == "open"

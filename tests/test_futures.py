@@ -130,3 +130,37 @@ def test_live_restart_adopts_unknown_position(tmp_path):
     b.tick()
     assert b.state["L"].phase == "open" and ("tpsl", "P9", "110.00", "95.00") in c.calls
     assert not any(x[0] == "order" for x in c.calls)    # never doubles up
+
+
+def market_setup(**kw):
+    base = dict(name="M", pair="B-BTC_USDT", side="long", entry_price="market", take_profit=64100,
+                stop_loss=64000, quantity=1, leverage=10, price_decimals=1)
+    return Setup(**{**base, **kw})
+
+
+def test_market_entry_enters_now_and_exits(tmp_path):
+    c = FakeClient(price=64050)
+    b = bot(tmp_path, [market_setup()], c)
+    b.tick()
+    assert b.state["M"].phase == "open" and b.state["M"].entry_fill == 64050
+    c.price = 64101
+    b.tick()
+    st = b.state["M"]
+    assert st.phase == "done" and st.realized_pnl == pytest.approx(50 - 0.0005 * (64050 + 64100))
+
+
+def test_market_entry_waits_while_price_outside_range(tmp_path):
+    c = FakeClient(price=64128.5)                       # above take profit: a long makes no sense
+    b = bot(tmp_path, [market_setup()], c)
+    b.tick()
+    assert b.state["M"].phase == "waiting"
+    c.price = 64060
+    b.tick()
+    assert b.state["M"].phase == "open"
+
+
+def test_market_entry_checks_liquidation_at_entry(tmp_path):
+    c = FakeClient(price=70000)
+    b = bot(tmp_path, [market_setup(take_profit=80000, stop_loss=60000)], c)   # 14% stop at 10x
+    b.tick()
+    assert b.state["M"].phase == "waiting"

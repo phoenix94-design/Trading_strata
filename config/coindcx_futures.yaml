@@ -1,6 +1,7 @@
 # CoinDCX futures price-level strategy. You choose the prices; the bot watches 24/7.
 # Edit this file on the server, then:  sudo systemctl restart strata@coindcx_futures
 #
+# entry_price: a number, or market (enter right away at the current price)
 # side: long  -> buys when price reaches entry_price, sells at take_profit (higher) or stop_loss (lower)
 # side: short -> sells when price reaches entry_price, buys back at take_profit (lower) or stop_loss (higher)
 # entry_when: at_or_below (default for long) or at_or_above (default for short; use it for breakouts)
@@ -12,16 +13,30 @@ margin_currency: USDT
 fee_pct: 0.05            # assumed fee per side, used for paper P&L
 
 setups:
-  - name: btc_dip_long
+  # Ishwar's setup, 2026-11-17: buy BTC at market, sell at 64100, stop 64000, 1 BTC, 10x.
+  # Only enters while price is between the stop and the target (a long needs SL < price < TP).
+  - name: btc_scalp_long
     enabled: true
     pair: B-BTC_USDT
     side: long
-    entry_price: 85000     # <- set your buy price
-    take_profit: 88000     # <- set your sell price
-    stop_loss: 83500       # <- required: where you admit you're wrong
+    entry_price: market    # "market" = buy now at the current price
+    take_profit: 64100
+    stop_loss: 64000
+    quantity: 1
+    leverage: 10
+    repeat: false
+    price_decimals: 1
+
+  - name: btc_dip_long     # original placeholder, switched off
+    enabled: false
+    pair: B-BTC_USDT
+    side: long
+    entry_price: 85000
+    take_profit: 88000
+    stop_loss: 83500
     quantity: 0.001
     leverage: 3
-    repeat: false          # true = after exiting, wait for entry_price again
+    repeat: false
     price_decimals: 1
 
   # Example short, switched off:

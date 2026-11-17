@@ -8,7 +8,7 @@ copy the code, set the prices, start the service.
 Watches a CoinDCX USDT futures price every 5 seconds, 24/7. For each setup in
 `config/coindcx_futures.yaml`:
 
-1. **waiting**: does nothing until the price reaches `entry_price`.
+1. **waiting**: does nothing until the price reaches `entry_price` (or, with `entry_price: market`, enters at once while the price is between stop and target).
 2. **open**: opens the position at market (long = buy, short = sell) with the set leverage
    (isolated margin), then immediately puts a **take-profit and stop-loss on CoinDCX itself**
    (`create_tpsl`). If CoinDCX rejects the TP/SL, the bot closes the position straight away.
