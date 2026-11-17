@@ -11,7 +11,7 @@
 
 poll_seconds: 5          # how often the price is checked
 margin_currency: USDT
-fee_pct: 0.05            # assumed fee per side, used for paper P&L
+fee_pct: 0.059           # CoinDCX futures taker fee per side (maker 0.0236%), used for paper P&L
 
 setups:
   # Ishwar's setup #2, 2026-11-17: buy BTC at market, sell +0.1%, stop -0.1% from the fill, 0.01 BTC, 10x.

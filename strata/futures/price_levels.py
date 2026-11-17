@@ -144,7 +144,7 @@ class SetupState:
 
 
 class PriceLevelBot:
-    def __init__(self, setups, client, mode, state_dir: Path, log_dir: Path, fee_pct=0.05):
+    def __init__(self, setups, client, mode, state_dir: Path, log_dir: Path, fee_pct=0.059):
         self.setups = [s for s in setups if s.enabled]
         self.client, self.mode, self.fee_pct = client, mode, fee_pct
         self.state_path = Path(state_dir) / "futures_price_levels.json"
@@ -296,7 +296,7 @@ def run(root: Path, env: dict, poll_seconds=None):
     setups = load_setups(cfg)
     client = CoinDCXFutures(env.get("COINDCX_API_KEY", ""), env.get("COINDCX_API_SECRET", ""),
                             cfg.get("margin_currency", "USDT"))
-    bot = PriceLevelBot(setups, client, mode, root / "state", root / "logs", cfg.get("fee_pct", 0.05))
+    bot = PriceLevelBot(setups, client, mode, root / "state", root / "logs", cfg.get("fee_pct", 0.059))
     hc = env.get("HC_PING_COINDCX_FUTURES")
     poll = poll_seconds or int(cfg.get("poll_seconds", 5))
     log.info("CoinDCX futures price-level bot starting in %s mode: %s", mode.upper(),

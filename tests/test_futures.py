@@ -39,7 +39,7 @@ class FakeClient:
 
 
 def bot(tmp_path, setups, client, mode="paper"):
-    return PriceLevelBot(setups, client, mode, tmp_path, tmp_path)
+    return PriceLevelBot(setups, client, mode, tmp_path, tmp_path, fee_pct=0.05)
 
 
 def test_validation():
