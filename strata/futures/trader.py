@@ -51,6 +51,7 @@ class TradeState:
     protected: bool = False                       # sl2 + last TP placed on the exchange
     timer_started_at: float | None = None
     last_tick_ms: int = 0
+    inr_rate: float = 0.0                         # INR per USDT used to size an INR-margin trade
     realized_pnl: float = 0.0                     # USDT, after fees
     fees: float = 0.0
     opened_at: str = ""
@@ -183,6 +184,7 @@ class TradeManager:
             return self.finish(plan, st, "rejected", str(e))
 
         st.plan = asdict(plan)
+        st.inr_rate = rate or 0.0
         st.ordered_qty = qty
         st.phase = "entering"
         self.save()                                   # saved BEFORE the order: a crash can't cause a double entry
@@ -237,7 +239,8 @@ class TradeManager:
         st.realized_pnl -= fee
         self.record(plan, "entry", filled, avg, pnl=-fee, fee=fee,
                     note=(note or ("market" if plan.is_market else "limit filled"))
-                    + f"; TPs {'/'.join(f'{q:g}' for q in st.tp_qty)}; sl1 {st.sl1:g} sl2 {st.sl2:g}")
+                    + f"; TPs {'/'.join(f'{q:g}' for q in st.tp_qty)}; sl1 {st.sl1:g} sl2 {st.sl2:g}"
+                    + (f"; INR/USDT {st.inr_rate:g}" if st.inr_rate else ""))
         if not st.protected and not self.protect(plan, st, filled):
             return
         _, _, liq = self.ex.position(plan, st)

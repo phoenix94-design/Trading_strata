@@ -127,7 +127,7 @@ def test_sizing_and_split():
     qty = plan.quantity(64000, inst)
     assert qty == 0.007                                     # 100 USDT x5 / 64000, rounded down
     assert plan.split(qty, inst) == [0.003, 0.004]          # last part takes the remainder
-    inr = TradePlan(**trade(margin=10000, margin_currency="INR"))
+    inr = TradePlan(**trade(margin=10000, margin_currency="INR"))       # 10000 / 100 = 100 USDT
     assert inr.quantity(64000, inst, inr_per_usdt=100) == 0.007
     small = TradePlan(**trade(margin=20))
     assert small.quantity(64000, inst) == 0.001
@@ -357,3 +357,10 @@ def test_live_notices_exchange_stop_fired(tmp_path):
     st = sim.st()
     assert st.phase == "closed" and "sl2 fired on CoinDCX" in st.note
     assert float(sim.rows()[-1]["price"]) == 62500
+
+
+def test_inr_trade_logs_the_rate_used(tmp_path):
+    sim = Sim(tmp_path, [trade(margin=10000, margin_currency="INR")])
+    sim.price(64000)
+    assert sim.st().qty == 0.007 and sim.st().inr_rate == 100.0
+    assert "INR/USDT 100" in sim.rows()[0]["note"]
