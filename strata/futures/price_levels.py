@@ -35,8 +35,8 @@ class Setup:
     pair: str                   # CoinDCX futures pair, e.g. B-BTC_USDT
     side: str                   # long | short
     entry_price: float | str    # a price, or "market" = enter now at the current price
-    take_profit: float
-    stop_loss: float
+    take_profit: float | str    # a price, or a % from the entry fill, e.g. "+0.1%" (long) / "-0.1%" (short)
+    stop_loss: float | str      # a price, or a % from the entry fill, e.g. "-0.1%" (long) / "+0.1%" (short)
     quantity: float             # contract size in the coin, e.g. 0.001 BTC
     leverage: int = 1
     entry_when: str = ""        # at_or_below | at_or_above; default: below for long, above for short
@@ -52,35 +52,44 @@ class Setup:
             self.entry_when = "at_or_below" if self.side == "long" else "at_or_above"
         if self.entry_when not in ("at_or_below", "at_or_above"):
             raise ValueError(f"{self.name}: entry_when must be at_or_below or at_or_above")
-        if self.at_market:
-            # the entry is whatever the price is; only check what we can now, the rest at entry time
-            if self.side == "long" and not self.stop_loss < self.take_profit:
-                raise ValueError(f"{self.name}: long needs stop_loss < take_profit")
-            if self.side == "short" and not self.take_profit < self.stop_loss:
-                raise ValueError(f"{self.name}: short needs take_profit < stop_loss")
-        else:
+        self._tp, self._sl = _parse_level(self.take_profit), _parse_level(self.stop_loss)
+        if not self.at_market:
             self.entry_price = float(self.entry_price)
-            if self.side == "long" and not self.stop_loss < self.entry_price < self.take_profit:
-                raise ValueError(f"{self.name}: long needs stop_loss < entry_price < take_profit")
-            if self.side == "short" and not self.take_profit < self.entry_price < self.stop_loss:
-                raise ValueError(f"{self.name}: short needs take_profit < entry_price < stop_loss")
         if not 1 <= self.leverage <= MAX_LEVERAGE:
             raise ValueError(f"{self.name}: leverage must be 1..{MAX_LEVERAGE}")
         if self.quantity <= 0:
             raise ValueError(f"{self.name}: quantity must be > 0")
+        # Check what can be checked now; with a market entry and fixed prices the rest waits for the fill.
         if not self.at_market:
-            problem = self.stop_problem(self.entry_price)
-            if problem:
-                raise ValueError(f"{self.name}: {problem}")
+            problem = self.entry_problem(self.entry_price)
+        elif self._tp[0] == "pct" and self._sl[0] == "pct":
+            problem = self.entry_problem(100.0)
+        elif self._tp[0] == "abs" and self._sl[0] == "abs":
+            ok = self._sl[1] < self._tp[1] if self.side == "long" else self._tp[1] < self._sl[1]
+            problem = None if ok else "take_profit / stop_loss are on the wrong sides for a " + self.side
+        else:
+            problem = None
+        if problem:
+            raise ValueError(f"{self.name}: {problem}")
 
     @property
     def at_market(self):
         return isinstance(self.entry_price, str) and self.entry_price.strip().lower() == "market"
 
-    def stop_problem(self, entry):
-        """With isolated margin you are liquidated after roughly a 1/leverage move.
-        The stop must sit well inside that, or liquidation hits before the stop does."""
-        stop_move = abs(entry - self.stop_loss) / entry
+    def levels(self, entry):
+        """(take_profit, stop_loss) as prices for a given entry price."""
+        return _resolve(self._tp, entry), _resolve(self._sl, entry)
+
+    def entry_problem(self, entry):
+        """Why entering at this price would be wrong, or None."""
+        tp, sl = self.levels(entry)
+        if self.side == "long" and not sl < entry < tp:
+            return f"long needs stop {self.fmt(sl)} < entry {self.fmt(entry)} < target {self.fmt(tp)}"
+        if self.side == "short" and not tp < entry < sl:
+            return f"short needs target {self.fmt(tp)} < entry {self.fmt(entry)} < stop {self.fmt(sl)}"
+        # With isolated margin you are liquidated after roughly a 1/leverage move.
+        # The stop must sit well inside that, or liquidation hits before the stop does.
+        stop_move = abs(entry - sl) / entry
         if stop_move >= 0.8 / self.leverage:
             return (f"stop is {stop_move:.1%} away but {self.leverage}x leverage liquidates near "
                     f"{1 / self.leverage:.1%}; lower leverage or tighten the stop")
@@ -95,13 +104,13 @@ class Setup:
             return True
         return price <= self.entry_price if self.entry_when == "at_or_below" else price >= self.entry_price
 
-    def tp_hit(self, price):
-        return price >= self.take_profit if self.side == "long" else price <= self.take_profit
+    def tp_hit(self, price, tp):
+        return price >= tp if self.side == "long" else price <= tp
 
-    def sl_hit(self, price, slack=0.0):
+    def sl_hit(self, price, sl, slack=0.0):
         if self.side == "long":
-            return price <= self.stop_loss * (1 - slack)
-        return price >= self.stop_loss * (1 + slack)
+            return price <= sl * (1 - slack)
+        return price >= sl * (1 + slack)
 
     def pnl(self, entry, exit_, qty):
         return (exit_ - entry) * qty if self.side == "long" else (entry - exit_) * qty
@@ -110,10 +119,24 @@ class Setup:
         return f"{price:.{self.price_decimals}f}"
 
 
+def _parse_level(v):
+    """150.5 -> ("abs", 150.5);  "+0.1%" -> ("pct", 0.1);  "-0.1%" -> ("pct", -0.1)."""
+    if isinstance(v, str) and v.strip().endswith("%"):
+        return "pct", float(v.strip()[:-1])
+    return "abs", float(v)
+
+
+def _resolve(level, entry):
+    kind, v = level
+    return entry * (1 + v / 100) if kind == "pct" else v
+
+
 @dataclass
 class SetupState:
     phase: str = "waiting"         # waiting | open | done
     entry_fill: float = 0.0
+    tp: float = 0.0                # take profit / stop loss as prices, fixed when the position opened
+    sl: float = 0.0
     position_id: str = ""
     opened_at: str = ""
     trades: int = 0
@@ -160,7 +183,8 @@ class PriceLevelBot:
                 log.warning("%s: found an open %s position on CoinDCX; adopting it and (re)placing TP/SL", s.name, s.pair)
                 st.phase, st.position_id = "open", str(pos["id"])
                 st.entry_fill = float(pos.get("avg_price") or self.client.last_price(s.pair))
-                self.client.set_tpsl(st.position_id, s.take_profit, s.stop_loss, s.fmt)
+                st.tp, st.sl = s.levels(st.entry_fill)
+                self.client.set_tpsl(st.position_id, st.tp, st.sl, s.fmt)
             elif not pos and st.phase == "open":
                 self.close_book(s, self.client.last_price(s.pair), "closed while Strata was offline")
         self.save()
@@ -177,8 +201,9 @@ class PriceLevelBot:
             raise RuntimeError(f"{s.name}: order sent but no position appeared; check CoinDCX by hand")
         st.position_id = str(pos["id"])
         st.entry_fill = float(pos.get("avg_price") or self.client.last_price(s.pair))
+        st.tp, st.sl = s.levels(st.entry_fill)
         try:
-            self.client.set_tpsl(st.position_id, s.take_profit, s.stop_loss, s.fmt)
+            self.client.set_tpsl(st.position_id, st.tp, st.sl, s.fmt)
         except Exception:
             log.exception("%s: could not place TP/SL; closing the position so it is never unprotected", s.name)
             self.client.exit_position(st.position_id)
@@ -192,7 +217,7 @@ class PriceLevelBot:
         st.trades += 1
         st.realized_pnl += pnl
         st.phase = "waiting" if s.repeat else "done"
-        st.position_id, st.entry_fill, st.opened_at = "", 0.0, ""
+        st.position_id, st.entry_fill, st.opened_at, st.tp, st.sl = "", 0.0, "", 0.0, 0.0
 
     def step(self, s: Setup, price):
         st = self.state[s.name]
@@ -202,11 +227,7 @@ class PriceLevelBot:
         if st.phase == "waiting":
             if not s.entry_hit(price):
                 return
-            problem = None
-            if s.sl_hit(price) or s.tp_hit(price):
-                problem = "already past stop/target"
-            elif s.at_market:
-                problem = s.stop_problem(price)
+            problem = s.entry_problem(price)
             if problem:
                 if s.name not in self.skip_logged:      # say it once, not every 5 seconds
                     log.info("%s: price %s %s; not entering", s.name, s.fmt(price), problem)
@@ -217,24 +238,27 @@ class PriceLevelBot:
                 self.open_live(s, st)
             else:
                 st.entry_fill = price
+                st.tp, st.sl = s.levels(price)
             st.phase, st.opened_at = "open", datetime.now().isoformat(timespec="seconds")
             how = "market entry" if s.at_market else f"price reached {s.fmt(s.entry_price)}"
-            self.record(s, "open", st.entry_fill, f"{how}; TP {s.fmt(s.take_profit)} SL {s.fmt(s.stop_loss)}")
+            self.record(s, "open", st.entry_fill, f"{how}; TP {s.fmt(st.tp)} SL {s.fmt(st.sl)}")
             return
 
         # phase == "open"
+        if not st.tp:                            # state saved by an older version
+            st.tp, st.sl = s.levels(st.entry_fill)
         if self.mode == "paper":
-            if s.tp_hit(price):
-                self.close_book(s, s.take_profit, "take profit")
-            elif s.sl_hit(price):
-                self.close_book(s, s.stop_loss, "stop loss")
+            if s.tp_hit(price, st.tp):
+                self.close_book(s, st.tp, "take profit")
+            elif s.sl_hit(price, st.sl):
+                self.close_book(s, st.sl, "stop loss")
             return
 
         pos = self.client.open_position(s.pair)
         if pos is None:                          # CoinDCX's TP/SL fired
-            reason = "take profit" if abs(price - s.take_profit) < abs(price - s.stop_loss) else "stop loss"
-            self.close_book(s, s.take_profit if reason == "take profit" else s.stop_loss, f"{reason} (on CoinDCX)")
-        elif s.sl_hit(price, slack=BACKUP_STOP_SLIPPAGE):
+            reason = "take profit" if abs(price - st.tp) < abs(price - st.sl) else "stop loss"
+            self.close_book(s, st.tp if reason == "take profit" else st.sl, f"{reason} (on CoinDCX)")
+        elif s.sl_hit(price, st.sl, slack=BACKUP_STOP_SLIPPAGE):
             log.warning("%s: price %s is past the stop but the position is still open; closing it", s.name, s.fmt(price))
             self.client.exit_position(st.position_id)
             self.close_book(s, price, "backup stop by Strata")

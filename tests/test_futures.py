@@ -164,3 +164,35 @@ def test_market_entry_checks_liquidation_at_entry(tmp_path):
     b = bot(tmp_path, [market_setup(take_profit=80000, stop_loss=60000)], c)   # 14% stop at 10x
     b.tick()
     assert b.state["M"].phase == "waiting"
+
+
+def pct_setup(**kw):
+    base = dict(name="P", pair="B-BTC_USDT", side="long", entry_price="market", take_profit="+0.1%",
+                stop_loss="-0.1%", quantity=0.01, leverage=10, price_decimals=1)
+    return Setup(**{**base, **kw})
+
+
+def test_percent_levels_follow_the_fill(tmp_path):
+    c = FakeClient(price=64000)
+    b = bot(tmp_path, [pct_setup()], c)
+    b.tick()
+    st = b.state["P"]
+    assert st.phase == "open" and st.tp == pytest.approx(64064) and st.sl == pytest.approx(63936)
+    c.price = 63930
+    b.tick()
+    assert b.state["P"].phase == "done" and b.state["P"].realized_pnl < 0
+
+
+def test_percent_levels_live_tpsl_prices(tmp_path):
+    c = FakeClient(price=64000)
+    b = bot(tmp_path, [pct_setup()], c, mode="live")
+    b.tick()
+    assert ("tpsl", "P1", "64064.0", "63936.0") in c.calls
+
+
+def test_percent_levels_validation():
+    with pytest.raises(ValueError):
+        pct_setup(take_profit="-0.1%", stop_loss="+0.1%")      # wrong way round for a long
+    with pytest.raises(ValueError):
+        pct_setup(stop_loss="-9%")                               # beyond liquidation at 10x
+    pct_setup(side="short", take_profit="-0.1%", stop_loss="+0.1%")
