@@ -3,6 +3,7 @@
     venv/bin/python main.py --platform coindcx          # run forever (what systemd does)
     venv/bin/python main.py --platform coindcx --once   # one loop, then exit (for testing)
     venv/bin/python main.py --platform coindcx_futures  # price-level futures bot (config/coindcx_futures.yaml)
+    venv/bin/python main.py --platform coindcx_trades   # timed-stop trader (config/trades.yaml)
 """
 import argparse
 import logging
@@ -16,7 +17,7 @@ from strata.engine import Engine
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--platform", required=True, choices=["zerodha", "coindcx", "coindcx_futures"])
+    ap.add_argument("--platform", required=True, choices=["zerodha", "coindcx", "coindcx_futures", "coindcx_trades"])
     ap.add_argument("--once", action="store_true")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
@@ -29,9 +30,13 @@ def main():
                         format="%(asctime)s %(levelname)s %(message)s")
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    if args.platform == "coindcx_futures":
-        from strata.futures.price_levels import run
-        run(ROOT, {**read_env_file(ROOT / ".env"), **os.environ})
+    if args.platform in ("coindcx_futures", "coindcx_trades"):
+        env = {**read_env_file(ROOT / ".env"), **os.environ}
+        if args.platform == "coindcx_futures":
+            from strata.futures.price_levels import run
+        else:
+            from strata.futures.trader import run
+        run(ROOT, env)
         return
 
     s = load_settings(args.platform)

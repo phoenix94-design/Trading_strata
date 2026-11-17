@@ -47,6 +47,16 @@ After any `git pull`, run it again to apply the update.
   and never acts twice on the same candle. On Zerodha it reconciles with holdings, so a GTT that
   fired while the server was down gets recorded.
 
+## CoinDCX timed-stop trader (main strategy)
+
+Entry at market or limit, one or more take profits (percents adding up to 100%), and a two-level
+stop: touching sl1 starts a timer; sl2, or the timer running out in between, closes the trade; one
+tick back above sl1 resets the timer. Several trades run side by side, and sl2 plus the last take
+profit sit on CoinDCX itself. Trades go in `config/trades.yaml`; run it with
+`bash deploy/install.sh coindcx_trades`.
+Rules, worked example, how to add a trade and the go-live checklist:
+[docs/TIMED_SL_STRATEGY.md](docs/TIMED_SL_STRATEGY.md).
+
 ## CoinDCX futures price-level bot
 
 Set an entry price, take profit and stop loss in `config/coindcx_futures.yaml`. The bot watches 24/7
@@ -63,14 +73,14 @@ That doubles as your morning "log in to Kite" reminder.
 ## Layout
 
 ```
-main.py                    entry point: --platform coindcx|zerodha|coindcx_futures [--once]
+main.py                    entry point: --platform coindcx|zerodha|coindcx_futures|coindcx_trades [--once]
 config/*.yaml              symbols, candle interval, strategy params, risk limits
 strata/engine.py           the loop: reconcile -> stops -> strategy -> orders
 strata/strategies/         strategies (add new ones and register in __init__.py)
 strata/brokers/            paper, coindcx, zerodha
 strata/risk.py             position sizing, daily loss limit, kill switch
 strata/backtest.py         offline testing
-strata/futures/            CoinDCX futures client + price-level strategy
+strata/futures/            CoinDCX futures: client, timed-stop trader, price-level bot
 deploy/                    strata@.service template + install.sh
 tests/                     pytest suite
 ```

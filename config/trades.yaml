@@ -1,0 +1,43 @@
+# Trades for the timed-stop strategy (service: strata@coindcx_trades).
+# Full explanation: docs/TIMED_SL_STRATEGY.md
+#
+# HOW TO ADD A TRADE: append an entry under "trades:" with a NEW id, then
+#   sudo systemctl restart strata@coindcx_trades
+# A trade that has started is frozen: editing it here changes nothing. Ids are never reused.
+#
+# Fields:
+#   id                  unique name, e.g. btc-2026-11-18-1
+#   pair                CoinDCX futures pair: B-BTC_USDT, B-ETH_USDT, B-XAU_USDT (gold), B-CL_USDT (oil) ...
+#                       (the app's "Global Futures", e.g. S&P500 or NVDA, are NOT available through the API)
+#   margin_currency     USDT or INR (INR = the app's "INR-M Futures")
+#   side                long or short
+#   entry               market, or a limit price
+#   entry_expiry_minutes  limit only: cancel if not filled within this many minutes
+#   margin              how much margin to commit, in margin_currency
+#   leverage            whole number; asked before every trade
+#   take_profits        list of {price, percent}, nearest first; percents must add up to exactly 100
+#   sl1                 first stop: reaching it starts the timer
+#   sl2                 second stop, further away: reaching it closes the trade (also placed on CoinDCX)
+#   sl1_timer_minutes   how long price may stay between sl1 and sl2 before the trade is closed at market
+#   enabled             false = don't start it yet
+
+poll_seconds: 1
+notification: email_notification   # CoinDCX's own email on each order: no_notification / email_notification
+inr_per_usdt:                      # paper mode only: fixed INR per USDT rate (blank = spot price; live asks CoinDCX)
+
+trades:
+  # Example (switched off). Long BTC at market, two take profits, 10-minute sl1 timer.
+  - id: example-btc-long
+    enabled: false
+    pair: B-BTC_USDT
+    margin_currency: USDT
+    side: long
+    entry: market
+    margin: 20
+    leverage: 5
+    take_profits:
+      - {price: 64500, percent: 50}
+      - {price: 65500, percent: 50}
+    sl1: 63000
+    sl2: 62500
+    sl1_timer_minutes: 10
