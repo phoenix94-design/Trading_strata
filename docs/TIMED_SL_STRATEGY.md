@@ -1,7 +1,8 @@
 # Timed-stop strategy (CoinDCX futures)
 
 Ishwar's main strategy, agreed 2026-11-17. Service: `strata@coindcx_trades`. Trades are set in
-`config/trades.yaml`. This file is the handoff: the rules, how to add a trade, how it runs, and
+`config/trades.yaml` on the server. That file is not in git; `install.sh` creates it from
+`config/trades.example.yaml`. This file is the handoff: the rules, how to add a trade, how it runs, and
 how to change it.
 
 ## The rules
@@ -137,6 +138,7 @@ position. After every close, Strata cancels any leftover orders for the position
 | `strata/futures/executors.py` | `PaperExecutor` (simulated fills) and `LiveExecutor` (CoinDCX orders). |
 | `strata/futures/coindcx_futures.py` | The CoinDCX REST client, with notes on verified API behaviour. |
 | `tests/test_timed_sl.py` | All three stop scenarios, take profits, limits, shorts, restarts, live safety. |
+| `config/trades.example.yaml` | Template; the live file `config/trades.yaml` exists only on the server. |
 
 ## Extending
 

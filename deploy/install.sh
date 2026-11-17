@@ -29,6 +29,11 @@ fi
 chmod 600 .env
 grep -q '^TRADING_MODE=live' .env && echo "    !! .env says TRADING_MODE=live: real orders will be sent" || echo "    mode: paper"
 
+if [ ! -f config/trades.yaml ] && [ -f config/trades.example.yaml ]; then
+  cp config/trades.example.yaml config/trades.yaml
+  echo "    created config/trades.yaml from the example (your trades go here; it is not in git)"
+fi
+
 echo "==> 3. systemd service"
 sed -e "s|__USER__|$USER_NAME|g" -e "s|__DIR__|$DIR|g" deploy/strata@.service \
   | sudo tee /etc/systemd/system/strata@.service >/dev/null

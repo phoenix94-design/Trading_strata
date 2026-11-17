@@ -397,7 +397,11 @@ def run(root: Path, env: dict):
     from .coindcx_futures import CoinDCXFutures
     from .executors import LiveExecutor, PaperExecutor
 
-    cfg = yaml.safe_load((root / "config" / "trades.yaml").read_text()) or {}
+    path = root / "config" / "trades.yaml"                 # the server's own file, not in git
+    if not path.exists():
+        path = root / "config" / "trades.example.yaml"
+        log.warning("config/trades.yaml not found; using the example file (copy it to start trading)")
+    cfg = yaml.safe_load(path.read_text()) or {}
     mode = env.get("TRADING_MODE", "paper").lower()
     client = CoinDCXFutures(env.get("COINDCX_API_KEY", ""), env.get("COINDCX_API_SECRET", ""),
                             notification=cfg.get("notification", "email_notification"))

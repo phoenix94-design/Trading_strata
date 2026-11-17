@@ -52,7 +52,7 @@ After any `git pull`, run it again to apply the update.
 Entry at market or limit, one or more take profits (percents adding up to 100%), and a two-level
 stop: touching sl1 starts a timer; sl2, or the timer running out in between, closes the trade; one
 tick back above sl1 resets the timer. Several trades run side by side, and sl2 plus the last take
-profit sit on CoinDCX itself. Trades go in `config/trades.yaml`; run it with
+profit sit on CoinDCX itself. Trades go in `config/trades.yaml` on the server (not in git; copied from `config/trades.example.yaml`); run it with
 `bash deploy/install.sh coindcx_trades`.
 Rules, worked example, how to add a trade and the go-live checklist:
 [docs/TIMED_SL_STRATEGY.md](docs/TIMED_SL_STRATEGY.md).

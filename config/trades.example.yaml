@@ -1,5 +1,7 @@
 # Trades for the timed-stop strategy (service: strata@coindcx_trades).
 # Full explanation: docs/TIMED_SL_STRATEGY.md
+# This is the EXAMPLE kept in git. The server uses config/trades.yaml (a copy made by install.sh,
+# not in git, so code updates never clash with real trades).
 #
 # HOW TO ADD A TRADE: append an entry under "trades:" with a NEW id, then
 #   sudo systemctl restart strata@coindcx_trades

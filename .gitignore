@@ -9,3 +9,6 @@ logs/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Real trades live only on the server (template: config/trades.example.yaml)
+config/trades.yaml
