@@ -47,6 +47,12 @@ After any `git pull`, run it again to apply the update.
   and never acts twice on the same candle. On Zerodha it reconciles with holdings, so a GTT that
   fired while the server was down gets recorded.
 
+## CoinDCX futures price-level bot
+
+Set an entry price, take profit and stop loss in `config/coindcx_futures.yaml`. The bot watches 24/7
+and acts on them, with TP/SL held on CoinDCX. Run it with `bash deploy/install.sh coindcx_futures`.
+Full handoff, including the live checklist: [docs/COINDCX_FUTURES.md](docs/COINDCX_FUTURES.md).
+
 ## Healthchecks (Phase 6)
 
 Put one ping URL per platform in `.env` (`HC_PING_COINDCX=https://hc-ping.com/...`). Strata pings
@@ -57,13 +63,14 @@ That doubles as your morning "log in to Kite" reminder.
 ## Layout
 
 ```
-main.py                    entry point: --platform coindcx|zerodha [--once]
+main.py                    entry point: --platform coindcx|zerodha|coindcx_futures [--once]
 config/*.yaml              symbols, candle interval, strategy params, risk limits
 strata/engine.py           the loop: reconcile -> stops -> strategy -> orders
 strata/strategies/         strategies (add new ones and register in __init__.py)
 strata/brokers/            paper, coindcx, zerodha
 strata/risk.py             position sizing, daily loss limit, kill switch
 strata/backtest.py         offline testing
+strata/futures/            CoinDCX futures client + price-level strategy
 deploy/                    strata@.service template + install.sh
 tests/                     pytest suite
 ```
